@@ -1,5 +1,6 @@
 #include <gst/gst.h>
 #include <glib.h>
+#include "gstDebugging.h"
 
 
 static gboolean
@@ -68,64 +69,85 @@ int
 main (int   argc,
       char *argv[])
 {
-  GMainLoop *loop;
+    GMainLoop *loop;
 
-  GstElement *pipeline, *source, *demuxer, *queue1, *queue2, *queue3, 
-  		*parser, *decoder, *sink;
-  GstBus *bus;
-  guint bus_watch_id;
+    GstElement *pipeline, *source, *demuxer, *queue1, *queue2, *queue3, 
+	    *parser, *decoder, *sink, *vspmfilter, * capsfilter;
+    GstBus *bus;
+    guint bus_watch_id;
+    
+    GstCaps *filtercaps;
+    gint width, height;
+    GstPad *pad;
+    gchar *capsstr;
+    
+    GstElementFactory *source_factory, *sink_factory;
+    
+    /* Initialisation */
+    gst_init (&argc, &argv);
 
-  /* Initialisation */
-  gst_init (&argc, &argv);
-
-  loop = g_main_loop_new (NULL, FALSE);
+    loop = g_main_loop_new (NULL, FALSE);
 
 
-  /* Check input arguments */
-  if (argc != 2) {
-    g_printerr ("Usage: %s <Ogg/Vorbis filename>\n", argv[0]);
-    return -1;
-  } 
+    /* Check input arguments */
+    if (argc != 2) {
+        g_printerr ("Usage: %s <Ogg/Vorbis filename>\n", argv[0]);
+        return -1;
+    } 
 
 
-  /* Create gstreamer elements */
-  pipeline 	= gst_pipeline_new ("video-player");
-  source   	= gst_element_factory_make ("filesrc",       	"source");
-  demuxer  	= gst_element_factory_make ("qtdemux",       	"demuxer");
-  queue1  	= gst_element_factory_make ("queue",        	"queue1");
-  parser	= gst_element_factory_make ("h264parse",     	"parser");
-  queue2  	= gst_element_factory_make ("queue",        	"queue2");
-  decoder	= gst_element_factory_make ("omxh264dec",     "decoder");
-  queue3  	= gst_element_factory_make ("queue",        	"queue3");
-  sink	= gst_element_factory_make ("waylandsink", 		"video_sink");
+    /* Create gstreamer elements */
+    pipeline 	= gst_pipeline_new ("video-player");
+    source   	= gst_element_factory_make ("filesrc",       	"source");
+    demuxer  	= gst_element_factory_make ("qtdemux",       	"demuxer");
+    queue1  	= gst_element_factory_make ("queue",        	"queue1");
+    parser	    = gst_element_factory_make ("h264parse",     	"parser");
+    queue2  	= gst_element_factory_make ("queue",        	"queue2");
+    decoder	    = gst_element_factory_make ("omxh264dec",       "decoder");
+    queue3  	= gst_element_factory_make ("queue",        	"queue3");
+    sink	    = gst_element_factory_make ("waylandsink", 		"video_sink");
+    vspmfilter 	= gst_element_factory_make ("vspmfilter",      	"rfilter");
+    capsfilter 	= gst_element_factory_make ("capsfilter",      	"cfilter");
+    
 
-  if (!pipeline || !source || !demuxer || !queue1 || !queue2 || !queue3 || !parser || !decoder || !sink) {
-    g_printerr ("One element could not be created. Exiting.\n");
-    return -1;
-  }
 
-  /* Set up the pipeline */
 
-  /* we set the input filename to the source element */
-  g_object_set (G_OBJECT (source), "location", argv[1], NULL);
+    if (!pipeline || !source || !demuxer || !queue1 || !queue2 || !queue3 || !parser || !decoder || !sink) {
+        g_printerr ("One element could not be created. Exiting.\n");
+        return -1;
+    }
 
-  /* we add a message handler */
-  bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
-  bus_watch_id = gst_bus_add_watch (bus, bus_call, loop);
-  gst_object_unref (bus);
+    /* Set up the pipeline */
 
-  /* we add all elements into the pipeline */
-  /* file-source | ogg-demuxer | vorbis-decoder | converter | alsa-output */
-  gst_bin_add_many (GST_BIN (pipeline),
-                    source, demuxer, queue1, queue2, queue3, parser, decoder, sink, NULL);
+    /* we set the input filename to the source element */
+    g_object_set (G_OBJECT (source), "location", argv[1], NULL);
+    g_object_set (G_OBJECT (vspmfilter), "dmabuf-use", true, NULL);
+    
+#ifdef DISPLAY_VGA
+    gst_util_set_object_arg (G_OBJECT (capsfilter), "caps",
+      "video/x-raw, width=640, height=480");
+#endif
 
-  /* we link the elements together */
-  /* file-source -> ogg-demuxer ~> vorbis-decoder -> converter -> alsa-output */
-  gst_element_link (source, demuxer);
-  gst_element_link_many ( queue1, parser, queue2, decoder, queue3, sink, NULL);
-  g_signal_connect (demuxer, "pad-added", G_CALLBACK (on_pad_added), queue1);
+    /* we add a message handler */
+    bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
+    bus_watch_id = gst_bus_add_watch (bus, bus_call, loop);
+    gst_object_unref (bus);
 
-  /* note that the demuxer will be linked to the decoder dynamically.
+    /* we add all elements into the pipeline */
+    /* file-source | ogg-demuxer | vorbis-decoder | converter | alsa-output */
+    gst_bin_add_many (GST_BIN (pipeline),
+                    source, demuxer, queue1, queue2, queue3, parser, decoder,               
+                    vspmfilter, capsfilter, sink, NULL);
+
+    /* we link the elements together */
+    /* file-source -> ogg-demuxer ~> vorbis-decoder -> converter -> alsa-output */
+    gst_element_link (source, demuxer);
+    gst_element_link_many ( queue1, parser, queue2, decoder, queue3, vspmfilter, capsfilter, sink, NULL);
+
+    g_signal_connect (demuxer, "pad-added", G_CALLBACK (on_pad_added), queue1);
+
+
+    /* note that the demuxer will be linked to the decoder dynamically.
      The reason is that Ogg may contain various streams (for example
      audio and video). The source pad(s) will be created at run time,
      by the demuxer when it detects the amount and nature of streams.
@@ -133,26 +155,26 @@ main (int   argc,
      when the "pad-added" is emitted.*/
 
 
-  GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline");
-    
-  /* Set the pipeline to "playing" state*/
-  g_print ("Now playing: %s\n", argv[1]);
-  gst_element_set_state (pipeline, GST_STATE_PLAYING);
+    GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline");
+
+    /* Set the pipeline to "playing" state*/
+    g_print ("Now playing: %s\n", argv[1]);
+    gst_element_set_state (pipeline, GST_STATE_PLAYING);
 
 
-  /* Iterate */
-  g_print ("Running...\n");
-  g_main_loop_run (loop);
+    /* Iterate */
+    g_print ("Running...\n");
+    g_main_loop_run (loop);
 
 
-  /* Out of the main loop, clean up nicely */
-  g_print ("Returned, stopping playback\n");
-  gst_element_set_state (pipeline, GST_STATE_NULL);
+    /* Out of the main loop, clean up nicely */
+    g_print ("Returned, stopping playback\n");
+    gst_element_set_state (pipeline, GST_STATE_NULL);
 
-  g_print ("Deleting pipeline\n");
-  gst_object_unref (GST_OBJECT (pipeline));
-  g_source_remove (bus_watch_id);
-  g_main_loop_unref (loop);
+    g_print ("Deleting pipeline\n");
+    gst_object_unref (GST_OBJECT (pipeline));
+    g_source_remove (bus_watch_id);
+    g_main_loop_unref (loop);
 
-  return 0;
+    return 0;
 }
