@@ -1,7 +1,6 @@
 #include <gst/gst.h>
 #include <glib.h>
-#include "gstDebugging.h"
-
+#include "eAI_Stream.hpp"
 
 static gboolean
 bus_call (GstBus     *bus,
@@ -71,13 +70,12 @@ on_pad_added (GstElement *element,
 */
 
 int
-main (int   argc,
-      char *argv[])
+eAIStream ( int argc, char *argv[])
 {
     GMainLoop *loop;
 
     GstElement *pipeline, *source, *demuxer, *queue1, *queue2, *queue3, 
-	    *parser, *decoder, *sink, *vspmfilter, * capsfilter;
+	    *parser, *decoder, *sink, *appsink, *vspmfilter, * capsfilter;
     GstBus *bus;
     guint bus_watch_id;
     
@@ -90,15 +88,9 @@ main (int   argc,
     
     /* Initialisation */
     gst_init (&argc, &argv);
+ 
 
     loop = g_main_loop_new (NULL, FALSE);
-
-
-    /* Check input arguments */
-    if (argc != 2) {
-        g_printerr ("Usage: %s <Ogg/Vorbis filename>\n", argv[0]);
-        return -1;
-    } 
 
 
     /* Create gstreamer elements */
@@ -111,13 +103,14 @@ main (int   argc,
     decoder	    = gst_element_factory_make ("omxh264dec",       "decoder");
     queue3  	= gst_element_factory_make ("queue",        	"queue3");
     sink	    = gst_element_factory_make ("waylandsink", 		"video_sink");
+    appsink	    = gst_element_factory_make ("appsink", 		    "app_sink");
     vspmfilter 	= gst_element_factory_make ("vspmfilter",      	"rfilter");
     capsfilter 	= gst_element_factory_make ("capsfilter",      	"cfilter");
     
 
 
 
-    if (!pipeline || !source || !demuxer || !queue1 || !queue2 || !queue3 || !parser || !decoder || !sink) {
+    if (!pipeline || !source || !demuxer || !queue1 || !queue2 || !queue3 || !parser || !decoder || !appsink) {
         g_printerr ("One element could not be created. Exiting.\n");
         return -1;
     }
@@ -130,7 +123,7 @@ main (int   argc,
     
 #ifdef DISPLAY_VGA
     gst_util_set_object_arg (G_OBJECT (capsfilter), "caps",
-      "video/x-raw, width=640, height=480, format=RGB16");
+      "video/x-raw, width=640, height=480");
 #endif
 
     /* we add a message handler */
@@ -138,16 +131,20 @@ main (int   argc,
     bus_watch_id = gst_bus_add_watch (bus, bus_call, loop);
     gst_object_unref (bus);
 
+    
+    eAI_AppSinkConfigure( appsink);
+    
     /* we add all elements into the pipeline */
     /* file-source | ogg-demuxer | vorbis-decoder | converter | alsa-output */
     gst_bin_add_many (GST_BIN (pipeline),
                     source, demuxer, queue1, queue2, queue3, parser, decoder,               
-                    vspmfilter, capsfilter, sink, NULL);
+                    vspmfilter, capsfilter, appsink, NULL);
 
     /* we link the elements together */
     /* file-source -> ogg-demuxer ~> vorbis-decoder -> converter -> alsa-output */
     gst_element_link (source, demuxer);
-    gst_element_link_many ( queue1, parser, queue2, decoder, queue3, vspmfilter, capsfilter, sink, NULL);
+    gst_element_link_many ( queue1, parser, queue2, decoder, queue3, 
+    vspmfilter, capsfilter, appsink, NULL);
 
     g_signal_connect (demuxer, "pad-added", G_CALLBACK (on_pad_added), queue1);
 
@@ -159,7 +156,7 @@ main (int   argc,
      Therefore we connect a callback function which will be executed
      when the "pad-added" is emitted.*/
 
-    print_pad_capabilities (sink, "sink");
+
     GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline");
 
     /* Set the pipeline to "playing" state*/

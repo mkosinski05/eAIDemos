@@ -1,6 +1,7 @@
 GS_LINK = -isystem ${SDKTARGETSYSROOT}/usr/include/gstreamer-1.0 \
 	  		  -isystem ${SDKTARGETSYSROOT}/usr/include/glib-2.0 \
 	  		  -isystem ${SDKTARGETSYSROOT}/usr/lib64/glib-2.0/include \
+	  		  -isystem ${PWD} \
 			  -lgstreamer-1.0
 
 BSP_SDK_FLAG = \
@@ -13,9 +14,9 @@ BSP_SDK_FLAG = \
 			  -lmount -lresolv -lexpat -lpangoft2-1.0 -lblkid \
 
 all: eAIVideo.cpp
-	${CXX} -std=c++14 eAIVideo.cpp \
+	${CXX} -std=c++14 eAIVideo.cpp eAI_Stream.cpp eAI_AppSink.cpp gstutils.cpp \
 	${GS_LINK} ${BSP_SDK_FLAG} \
-	-lpthread -O2 -ldl ${LDFLAGS} -o eAIVideo	
+	-lpthread -O2 -ldl ${LDFLAGS} -o bin/eAIVideo	
 
 clean:
-	rm -rf *.o eAIVideo
+	rm -rf *.o bin/*         
