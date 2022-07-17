@@ -1,7 +1,8 @@
 GS_LINK = -isystem ${SDKTARGETSYSROOT}/usr/include/gstreamer-1.0 \
 	  		  -isystem ${SDKTARGETSYSROOT}/usr/include/glib-2.0 \
 	  		  -isystem ${SDKTARGETSYSROOT}/usr/lib64/glib-2.0/include \
-	  		  -isystem ${PWD} \
+	  		  -isystem / \
+	  		  -isystem /yolo \
 			  -lgstreamer-1.0
 
 BSP_SDK_FLAG = \
@@ -13,8 +14,16 @@ BSP_SDK_FLAG = \
 			  -latk-1.0 -lgio-2.0 -lpango-1.0 -lfreetype -lpixman-1 -luuid -lpcre \
 			  -lmount -lresolv -lexpat -lpangoft2-1.0 -lblkid \
 
+SRC=eAIVideo.cpp \
+    eAI_Stream.cpp \
+    eAI_AppSink.cpp \
+    gstutils.cpp \
+    yolo/yolo_inf.cpp \
+    yolo/yolo_post.cpp
+
 all: eAIVideo.cpp
-	${CXX} -std=c++14 eAIVideo.cpp eAI_Stream.cpp eAI_AppSink.cpp gstutils.cpp \
+	${CXX} -std=c++14 ${SRC} \
+	-DYOLOV2 \
 	${GS_LINK} ${BSP_SDK_FLAG} \
 	-lpthread -O2 -ldl ${LDFLAGS} -o bin/eAIVideo	
 

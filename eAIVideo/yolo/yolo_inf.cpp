@@ -2,7 +2,7 @@
 /*DRPAI Driver Header*/
 #include <linux/drpai.h>
 #include "define.h"
-#include "yolo_inf.hpp"
+#include "yolo.hpp"
 
 using namespace std;
 
