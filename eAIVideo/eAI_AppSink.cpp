@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <atomic>
 #include <string.h>
+#include "yolo.hpp"
 
 #define DISPLAY_WIDTH       (640)
 #define DISPLAY_HEIGHT      (480)
@@ -17,8 +18,10 @@ typedef struct _CustomData {
 }CustomData;
 
 static FILE *fptr;
-static uint8_t *ptmp_buf;
+
 static std::atomic<uint32_t> flag_display (0);
+
+static YoloInference eAI;
 
 static CustomData data;
 /* The appsink has received a buffer */
@@ -29,6 +32,7 @@ static GstFlowReturn new_sample (GstElement *sink, CustomData *data) {
   GstBuffer* buffer;
   
   static int size = 0;
+  static bool caponce = true;
   
   /* Retrieve the buffer */
   g_signal_emit_by_name (sink, "pull-sample", &sample);
@@ -39,16 +43,29 @@ static GstFlowReturn new_sample (GstElement *sink, CustomData *data) {
 	
     gst_buffer_map (buffer, &map, GST_MAP_READ);
     
-    if ( size == 0 )
+    if ( caponce )
     {
         /* Do this once for debug  */
         size = map.size;
         g_print("\n%d\n", size);
         print_pad_capabilities (sink, "sink");
-        memcpy(ptmp_buf, map.data, map.size);
-        flag_display.store(size);
+        caponce = false;
     }
-    g_print("*");
+    
+    if ( flag_display.load() == 0 ) {
+        
+        // eAI Inference ready 
+        // Send buffer to eAI
+        if ( eAI.getInputBuf() != NULL ) 
+        {
+            memcpy(eAI.getInputBuf(), map.data, map.size);
+        }
+        flag_display.store(size);
+        
+    } else {
+        // Missed frame
+        g_print("*");
+    }
     
     gst_buffer_unmap (buffer, &map);
     gst_sample_unref (sample);
@@ -68,20 +85,30 @@ void eAI_AppSinkConfigure ( GstElement*  app_sink) {
 void *R_eAIInference_thread(void *threadid)
 {
     uint32_t sz = 0;
-    static bool cap_once = true;
-    ptmp_buf = (uint8_t*)malloc(TMP_BUF_SIZE);
-    printf("Started Display Thread\n");
+    
+    // Initialize Inference
+    if ( eAI.init() != 0 )
+    {
+        printf("ERROR: Failed Initialize eAI Inference \n");
+    }
+    
+    printf("Started Ai Inference Thread\n");
     while (1) {
         sz = flag_display.load();
-        if (sz != 0 && cap_once)
+        if (sz != 0 )
         {
 
-            printf("First Frame %d\n", sz);
-            fptr = fopen ("capImage", "wb");
-            fwrite ( ptmp_buf, sizeof(uint8_t), sz, fptr);
-            fclose(fptr);
-            cap_once = false;
+            //printf("Processing AI Inference %d\n", sz);
+            if ( eAI.start() != 0)
+                break;
+            if ( eAI.wait() != 0 )
+                break;
+            //printf("\nFinished AI Inference\n");
+  
+            flag_display.store(0);
 
         }
     }
+    printf("eAI Ending Thread\n");
+    return NULL;
 }

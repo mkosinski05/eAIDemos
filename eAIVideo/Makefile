@@ -2,7 +2,7 @@ GS_LINK = -isystem ${SDKTARGETSYSROOT}/usr/include/gstreamer-1.0 \
 	  		  -isystem ${SDKTARGETSYSROOT}/usr/include/glib-2.0 \
 	  		  -isystem ${SDKTARGETSYSROOT}/usr/lib64/glib-2.0/include \
 	  		  -isystem / \
-	  		  -isystem /yolo \
+	  		  -isystem yolo \
 			  -lgstreamer-1.0
 
 BSP_SDK_FLAG = \
@@ -21,11 +21,34 @@ SRC=eAIVideo.cpp \
     yolo/yolo_inf.cpp \
     yolo/yolo_post.cpp
 
-all: eAIVideo.cpp
+all: eAIVideo_yolov2 \
+     eAIVideo_tinyv2 \
+     eAIVideo_yolov3 \
+     eAIVideo_tinyv3 
+     
+eAIVideo_yolov2: eAIVideo.cpp
 	${CXX} -std=c++14 ${SRC} \
 	-DYOLOV2 \
 	${GS_LINK} ${BSP_SDK_FLAG} \
-	-lpthread -O2 -ldl ${LDFLAGS} -o bin/eAIVideo	
+	-lpthread -O2 -ldl ${LDFLAGS} -o bin/eAIVideo_yolov2	
 
+eAIVideo_tinyv2: eAIVideo.cpp
+	${CXX} -std=c++14 ${SRC} \
+	-DTINYYOLOV2 \
+	${GS_LINK} ${BSP_SDK_FLAG} \
+	-lpthread -O2 -ldl ${LDFLAGS} -o bin/eAIVideo_tinyv2
+
+eAIVideo_yolov3: eAIVideo.cpp
+	${CXX} -std=c++14 ${SRC} \
+	-DYOLOV3 \
+	${GS_LINK} ${BSP_SDK_FLAG} \
+	-lpthread -O2 -ldl ${LDFLAGS} -o bin/eAIVideo_yolov3	
+
+eAIVideo_tinyv3: eAIVideo.cpp
+	${CXX} -std=c++14 ${SRC} \
+	-DTINYYOLOV3 \
+	${GS_LINK} ${BSP_SDK_FLAG} \
+	-lpthread -O2 -ldl ${LDFLAGS} -o bin/eAIVideo_tinyv3
+	
 clean:
-	rm -rf *.o bin/*         
+	rm -rf *.o bin/eAIVideo*       

@@ -2,7 +2,10 @@
 #include <glib.h>
 #include "eAI_Stream.hpp"
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
+#include<sys/wait.h>
+#include<unistd.h>
 #include <pthread.h>
 
 static pthread_t eAIinference_thread;
@@ -28,7 +31,7 @@ int main (int   argc, char *argv[])
         printf("[ERROR] Failed to create Capture Thread.\n");
         goto end_threads;
     }
-
+    sleep(10);
     // Start Stream
     eAIStream ( argc, argv);
    

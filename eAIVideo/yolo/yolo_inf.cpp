@@ -1,17 +1,12 @@
 
-/*DRPAI Driver Header*/
-#include <linux/drpai.h>
-#include "define.h"
+
 #include "yolo.hpp"
 
-using namespace std;
-
-st_addr_t drpai_address;
 
 static int8_t load_drpai_data(int8_t drpai_fd);
 static int8_t load_data_to_mem(string data, int8_t drpai_fd, uint32_t from, uint32_t size);
 static int8_t read_addrmap_txt(string addr_file);
-
+static vector<string> load_label_file(string label_file_name);
 YoloInference::YoloInference( )
 {
     width   = DRPAI_IN_WIDTH;
@@ -35,12 +30,14 @@ int8_t YoloInference::init()
     {
         return -1;
     }
-    inBuffer =(uint8_t*) mmap(NULL, size ,PROT_READ|PROT_WRITE, MAP_SHARED,  udmabuf_fd, 0);
+    inBuffer =(uint8_t*) mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED,  udmabuf_fd, 0);
 
     if (inBuffer == MAP_FAILED)
     {
         return -1;
     }
+    printf("Input Buffer Address: %lx\n", (uintptr_t)inBuffer);
+    
     /* Write once to allocate physical memory to u-dma-buf virtual space.
     * Note: Do not use memset() for this.
     *       Because it does not work as expected. */
@@ -90,7 +87,7 @@ int8_t YoloInference::init()
 
     
     /* Set DRP-AI Driver Input (DRP-AI Object files address and size)*/
-    proc[DRPAI_INDEX_INPUT].address       = (uintptr_t)getInputBuf();
+    proc[DRPAI_INDEX_INPUT].address       = UDMABUF_ADDRESS;
     proc[DRPAI_INDEX_INPUT].size          = drpai_address.data_in_size;
     proc[DRPAI_INDEX_DRP_CFG].address     = drpai_address.drp_config_addr;
     proc[DRPAI_INDEX_DRP_CFG].size        = drpai_address.drp_config_size;
@@ -105,9 +102,11 @@ int8_t YoloInference::init()
     proc[DRPAI_INDEX_OUTPUT].address      = drpai_address.data_out_addr;
     proc[DRPAI_INDEX_OUTPUT].size         = drpai_address.data_out_size;
     
-     
+    goto end_main;
+   
     /* Terminating process */
 end_close_drpai:
+    fprintf(stderr, "eAI Close drpai file\n");
     errno = 0;
     ret = close(drpai_fd);
     if (0 != ret)
@@ -211,7 +210,7 @@ uint8_t* YoloInference::getOutputBuf()
 *                 not 0 otherwise
 ******************************************/
 
-static int8_t read_addrmap_txt(string addr_file)
+int8_t YoloInference::read_addrmap_txt(string addr_file)
 {
     string str;
     uint32_t l_addr;
@@ -381,7 +380,7 @@ end:
 * Return value  : 0 if succeeded
 *               : not 0 otherwise
 ******************************************/
-static int8_t load_drpai_data(int8_t drpai_fd)
+int8_t YoloInference::load_drpai_data(int8_t drpai_fd)
 {
     uint32_t addr = 0;
     uint32_t size = 0;
@@ -423,4 +422,35 @@ static int8_t load_drpai_data(int8_t drpai_fd)
         }
     }
     return 0;
+}
+
+/*****************************************
+* Function Name     : load_label_file
+* Description       : Load label list text file and return the label list that contains the label.
+* Arguments         : label_file_name = filename of label list. must be in txt format
+* Return value      : vector<string> list = list contains labels
+*                     empty if error occured
+******************************************/
+static vector<string> load_label_file(string label_file_name)
+{
+    vector<string> list = {};
+    vector<string> empty = {};
+    ifstream infile(label_file_name);
+
+    if (!infile.is_open())
+    {
+        return list;
+    }
+
+    string line = "";
+    while (getline(infile,line))
+    {
+        list.push_back(line);
+        if (infile.fail())
+        {
+            return empty;
+        }
+    }
+
+    return list;
 }
